@@ -1,0 +1,105 @@
+﻿var binary form 0b.....
+literal 'x(acii)' ascii symbol
+null - nobody referance 
+
+string name
+$"Name: {name}"
+Console.WriteLine("Имя: {0}  Возраст: {2}  Рост: {1}м", name, height, age);
+
+При присвоении значений надо иметь в виду следующую тонкость: все вещественные литералы рассматриваются как значения типа double. 
+И чтобы указать, что дробное число представляет тип float или тип decimal, 
+необходимо к литералу добавлять суффикс: F/f - для float и M/m - для decimal.
+Подобным образом все целочисленные литералы рассматриваются как значения типа int. 
+Чтобы явным образом указать, что целочисленный литерал представляет значение типа uint, 
+надо использовать суффикс U/u, для типа long - суффикс L/l, а для типа ulong - суффикс UL/ul:
+
+var - implicit typing
+
+Convert
+
+int[] nums2 = new int[4] { 1, 2, 3, 5 };
+foreach (int i in numbers)
+{
+    Console.WriteLine(i);
+}
+
+int[,] nums1;
+int[,] nums2 = new int[2, 3];
+int[,] nums3 = new int[2, 3] { { 0, 1, 2 }, { 3, 4, 5 } };
+int[,] nums4 = new int[,] { { 0, 1, 2 }, { 3, 4, 5 } };
+int[,] nums5 = new [,]{ { 0, 1, 2 }, { 3, 4, 5 } };
+int[,] nums6 = { { 0, 1, 2 }, { 3, 4, 5 } };
+
+out - выходной параметр метода
+ref - ссылка
+
+Во всех предыдущих примерах мы использовали постоянное число параметров. 
+Но, используя ключевое слово params, мы можем передавать неопределенное количество параметров:
+static void Addition(params int[] integers)
+{
+    int result = 0;
+    for (int i = 0; i < integers.Length; i++)
+    {
+        result += integers[i];
+    }
+    Console.WriteLine(result);
+}
+ 
+static void Main(string[] args)
+{
+    Addition(1, 2, 3, 4, 5);
+     
+    int[] array = new int[] { 1, 2, 3, 4 };
+    Addition(array);
+ 
+    Addition();
+    Console.ReadLine();
+}
+
+--------------Кортеж представляет набор значений, заключенных в круглые скобки:--------------------------
+var tuple = (5, 10);
+(string, int, double) person = ("Tom", 25, 81.23);
+var tuple = (count:5, sum:10);
+Console.WriteLine(tuple.count); // 5
+Console.WriteLine(tuple.sum);
+
+static void Main(string[] args)
+{
+    var (name, age) = GetTuple(("Tom", 23), 12);
+    Console.WriteLine(name);    // Tom
+    Console.WriteLine(age);     // 35
+    Console.Read();
+}
+         
+private static (string name, int age) GetTuple((string n, int a) tuple, int x)
+{
+    var result = (name: tuple.n, age: tuple.a + x);
+    return result;
+}
+
+Свойства и инкапсуляция
+
+readonly
+
+typeof
+
+delegate void Message();
+Message mes; // 2. Создаем переменную делегата
+mes = GoodMorning; // 3. Присваиваем этой переменной адрес метода
+mes(); // 4. Вызываем метод
+ delegate void Message();
+ 
+    static void Main(string[] args)
+    {
+        Message mes1 = Hello;
+        Message mes2 = HowAreYou;
+        Message mes3 = mes1 + mes2; // объединяем делегаты
+        mes3(); // вызываются все методы из mes1 и mes2
+         
+        Console.Read();
+    }
+
+	 //  IPHostEntry ipHost = Dns.GetHostEntry("www.vk.com"); // получаем информацию о хосте
+            //  WebClient client = new WebClient(); 
+            //  client.DownloadFile("http://padabum.com/x.php?id=50127", "РихтерДж.CLRviaC#.(2013).pdf");
+			// загрузка файла с сайта(файл будет назван "РихтерДж.CLRviaC#.(2013).pdf"
