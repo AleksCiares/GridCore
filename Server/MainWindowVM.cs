@@ -1,10 +1,13 @@
 ﻿using GalaSoft.MvvmLight;
+using GalaSoft.MvvmLight.Command;
 using System;
-using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Threading;
+using System.Windows;
+using System.Windows.Input;
 
 namespace Server
 {
@@ -12,34 +15,79 @@ namespace Server
     {
         public MainWindowVM()
         {
-            GRIDCore.initialize();
+            try
+            {
+                GRIDCore.Initialize();
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show(ex.Message + " " + "(" + ex.Source + ")" + 
+                    "\nError of host initializing. Reload the GRID System");
+                GRIDCore.TerminateGridCore();
+            }
 
             _hostName = GRIDCore.HostNameGc;
             _hostIP = GRIDCore.HostIpGc;
             _hostPort = GRIDCore.HostPortGc;
+            _hostStatus = GRIDCore.HostStatusGc;
 
-            _realGridCore = new Thread(new ThreadStart(realizeGridCore));
-            _realGridCore.Start();
-
-            _waitSock = new Thread(GRIDCore.waitSocket);
-            _waitSock.Start();
+            _waitSockThread = new Thread(GRIDCore.WaitSocket);
+            _waitSockThread.Start();
         }
 
-        //public async void doSmth()
-        //{
-        //    await Task.Run(() => realizeGridCore());
-        //}
-
-        private void realizeGridCore()
+        private void CheckAndSendData()
         {
-            while (true)
+            if(_pathToDir == null || _pathToFile == null)
             {
-                HostStatus = GRIDCore.HostStatusGc;
+                MessageBox.Show("Incorrect path to processed files or file.\n");
+                return;
+            }
 
-                Thread.Sleep(1000);
+            try
+            {
+                Socket socket;
+                if (GRIDCore.GetLightyLoadedMachine(out socket) == -1)
+                {
+                    MessageBox.Show("No unloaded machines.\n");
+                    return;
+                }
 
-                Console.WriteLine(_hostStatus);
+                string pathToProcessedFile = _pathToDir + @"\Processed_File_" + processedFileCount.ToString() + ".txt";
+                GRIDCore.SendDataToMachine(_pathToFile, pathToProcessedFile, ref socket);
 
+                processedFileCount++;
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show(ex.Message + " " + "(" + ex.Source + ")" +
+                    "\nTry again when remote machines are ready.");
+                return;
+            }
+        }
+
+        public ICommand SendDataToMachine
+        {
+            get
+            {
+                return _loadFileDir ?? (_loadFileDir = new RelayCommand(() =>
+                {
+                    Task.Factory.StartNew(() =>
+                    {
+                        CheckAndSendData();
+                    });
+                }));
+            }
+        }
+
+        public ICommand WindowClosing
+        {
+            get
+            {
+                return new RelayCommand<CancelEventArgs>(
+                    (args) => {
+                        MessageBox.Show("Closing Grid System ;(");
+                        GRIDCore.TerminateGridCore();
+                    });
             }
         }
 
@@ -56,12 +104,116 @@ namespace Server
             }
         }
 
+        public string PathToDir
+        {
+            get { return _pathToDir;  }
+            set
+            {
+                _pathToDir = @"" + value;
+                if (_pathToDir == null)
+                {
+                    _validDirectory = false;
+                    return;
+                }
+
+                try
+                {
+                    DirectoryInfo dirInfo = new DirectoryInfo(_pathToDir);
+                    if (!dirInfo.Exists)
+                        dirInfo.Create();
+                    
+                    ValidDirectory = true;
+                }
+                catch(ArgumentException ex)
+                {
+                    MessageBox.Show("path contains invalid characters such as \", <, >, or |.\n" + 
+                        ex.Message);
+                    _pathToDir = null;
+                    ValidDirectory = false;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("The directory cannot be created.\n" +
+                        ex.Message);
+                    _pathToDir = null;
+                    ValidDirectory = false;
+                }
+            }
+        }
+        public bool ValidDirectory
+        {
+            get { return _validDirectory; }
+            set
+            {
+                _validDirectory = value;
+                RaisePropertyChanged(() => ValidDirectory);
+            }
+        }
+
+        public string PathToFile
+        {
+            get { return _pathToFile; }
+            set
+            {
+                _pathToFile = @"" + value;
+                if (_pathToFile == null)
+                {
+                    ValidPathFile = false;
+                    return;
+                }
+
+                try
+                {
+                    FileInfo fileInfo = new FileInfo(_pathToFile);
+                    if(!fileInfo.Exists)
+                    {
+                        MessageBox.Show("File not exist.");
+                        _pathToFile = null;
+                        ValidPathFile = false;
+
+                        return;
+                    }
+                    
+                    ValidPathFile = true;
+                }
+                catch (ArgumentException ex)
+                {
+                    MessageBox.Show("path contains invalid characters such as \", <, >, or |.\n" +
+                        ex.Message);
+                    _pathToDir = null;
+                    ValidDirectory = false;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                    _pathToFile = null;
+                    ValidPathFile = false;
+                }
+            }
+        }
+        public bool ValidPathFile
+        {
+            get { return _validPathFile; }
+            set
+            {
+                _validPathFile = value;
+                RaisePropertyChanged(() => ValidPathFile);
+            }
+        }
+
         private string _hostName;
         private int    _hostPort;
         private string _hostIP;
         private string _hostStatus;
-        private Thread _realGridCore;
-        private Thread _waitSock;
-        private static List<Socket> _sockets = new List<Socket>();
+
+        private string _pathToDir;
+        private string _pathToFile;
+        private bool _validDirectory = false;
+        private bool _validPathFile = false;
+        private int processedFileCount = 0;
+
+        private Thread _waitSockThread;
+
+        private ICommand _loadFileDir;        
     }
 }

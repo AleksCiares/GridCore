@@ -9,118 +9,202 @@ namespace Server
 {
     public static class GRIDCore 
     {
-       //   initialize IP host, IP address, end point & create socket-listner & bind it
-        public static void initialize()
+        //  initialize IP host, IP address, end point & create socket-listner & bind it
+        //   _ipHost = Dns.GetHostEntry("localhost");
+        public static void Initialize()
         {
-                _ipHost = Dns.GetHostEntry(Dns.GetHostName());
-                _ipAddr = _ipHost.AddressList[1];
-                _ipEndPoint = new IPEndPoint(_ipAddr, _hostPort);
-
-                _sockListner = new Socket(_ipAddr.AddressFamily, SocketType.Stream,
-                    ProtocolType.Tcp);
-
-                _sockListner.Bind(_ipEndPoint); // связываем прослушивающий сокет с конечной точкой
-        }
-
-        //   this method must be run in separate thread
-        public static void waitSocket()
-        {
-            try
+            while (true)
             {
-                _sockListner.Listen(10);
-
-                while (true)
+                try
                 {
-                    _hostStatus = ($"Port: {_ipEndPoint.Port}. Waiting connection...");
+                    HostStatusGc = Environment.NewLine + "------- GRID System was started at: " +
+                        DateTime.Now + " -------";
 
-                    _sockets.Add(_sockListner.Accept());
+                    Random random = new Random();
+                    _hostPort = random.Next(1, 65000);
+                    _ipHost = Dns.GetHostByName(Dns.GetHostName());
+                    _ipAddr = _ipHost.AddressList[0];
+                    _ipEndPoint = new IPEndPoint(_ipAddr, _hostPort);
 
-                    _hostStatus = ($"Connected socket: {_sockets.Count}");
+                    _sockListner = new Socket(_ipAddr.AddressFamily, SocketType.Stream,
+                        ProtocolType.Tcp);
+                    _sockListner.Bind(_ipEndPoint); // связываем прослушивающий сокет с конечной точкой
+
+                    if (_ipHost.AddressList[0].ToString() == "127.0.0.1")
+                        HostStatusGc = "OFFLINE. Check internet connection...";
+                    else
+                        HostStatusGc = ($"ONLINE. Port: {_ipEndPoint.Port}. Waiting connection...");
+                    
+                    return;
+                }
+                catch (SocketException ex)
+                {
+                    HostStatusGc = ex.Message + " " + "(" + ex.Source + ")";
+                    continue;
+                }
+                catch(Exception ex)
+                {
+                    HostStatusGc = ex.Message + " " + "(" + ex.Source + ")";
+                    throw new Exception(ex.Message + " " + "(" + ex.Source + ")");
                 }
             }
-            catch (Exception ex)
+        }
+
+        //  this method must be run in separate thread & you need call initialize() before
+        public static void WaitSocket()
+        {
+            while (true)
             {
-                _hostStatus = ex.ToString();
+                try
+                {
+                    _sockListner.Listen(10);
+                    while (true)
+                    {
+                        _sockets.Add(_sockListner.Accept());
+                        //_sockets[_sockets.Count - 1].ReceiveTimeout = 5000;
+                        HostStatusGc = ($"Socket was connected: #" + $"{_sockets.Count} " +
+                            $"{_sockets[_sockets.Count - 1].AddressFamily.ToString()}");
+                    }
+                }
+                catch(InvalidOperationException ex)
+                {
+                    HostStatusGc = ex.Message + " " + "(" + ex.Source + ")";
+                    return;
+                //    throw new Exception(ex.Message + " " + "(" + ex.Source + ")");
+                }
+                catch (Exception ex)
+                {
+                    HostStatusGc = ex.Message + " " + "(" + ex.Source + ")";
+                    continue;
+                }
             }
         }
 
-        public static void closeSockets()
+        public static int GetLightyLoadedMachine(out Socket socket)
         {
-            for(int i =0;  i < _sockets.Count; i++)
-            {
-                _sockets[i].Shutdown(SocketShutdown.Both);
-                _sockets[i].Close();
-            }
+            CheckConnection();
+            if (_sockets.Count == 0)
+                throw new Exception("No sockets for connection.\n");
 
-            _objCount--;
-        }
-
-        public static ref Socket getLightyLoadedMachine(ref Socket socket)
-        {
             int workload = 100;
             int index = -1;
-            byte[] msg = Encoding.UTF8.GetBytes(Commands.Workload.ToString());
-            byte[] answer = new byte[10];
+            int bytesRec = 0;
 
-            for(int i = 0; i < _sockets.Count; i ++)
+            byte[] msg =Encoding.Default.GetBytes(_WorkLoad);
+            byte[] answer = new byte[56];
+            
+            for (int i = 0; i < _sockets.Count; i++)
             {
                 _sockets[i].Send(msg);
-
-                _sockets[i].Receive(answer);
-                if (Int32.Parse(Encoding.UTF8.GetString(answer)) < workload)
+                bytesRec = _sockets[i].Receive(answer);
+                if (Int32.Parse(Encoding.Default.GetString(answer, 0, bytesRec)) < workload)
                 {
                     index = i;
-                    socket = _sockets[i];
+                    workload = Int32.Parse(Encoding.Default.GetString(answer, 0, bytesRec));
                 }
+                  
             }
-
+            
             if (index == -1)
             {
                 socket = _sockets[0];
-                return ref socket;
+                return index;
             }
             else
-                return ref socket;
+            {
+                socket = _sockets[index];
+                return index;
+            }
         }
-        
-
 
         // index of prepared socket to proccess data
-        public static void proccessData(string filePath, int index)
+        public static void SendDataToMachine(string filePath, string pathToDir, ref Socket socket)
         {
-            //  если не будет работать попробовать Socket.ReceiveTimeout или Socket.ShutDown(SocketShutdown.Both)
-            _sockets[index].SendFile(filePath);
+            CheckConnection();
+            if (_sockets.Count == 0)
+                throw new Exception("No sockets for connection\n");
 
-            _file = new FileStream("newFile.txt", FileMode.CreateNew, FileAccess.ReadWrite,
+            byte[] bytes = Encoding.Default.GetBytes(_ProcessData);
+            socket.Send(bytes);
+
+            bytes = new byte[2];
+            int bytesRec = socket.Receive(bytes);
+            if (Encoding.Default.GetString(bytes, 0, bytesRec) == "ok")
+                Console.WriteLine(Encoding.Default.GetString(bytes, 0, bytesRec));
+
+            //  если не будет работать попробовать Socket.ReceiveTimeout или Socket.ShutDown(SocketShutdown.Both)
+            socket.SendFile(filePath);
+            
+            _file = new FileStream(pathToDir, FileMode.OpenOrCreate, FileAccess.ReadWrite,
                 FileShare.None);
 
+            int offset = 0;
             while (true)
             {
-                if(_sockets[index].Available > 4096)
+                bytes = new byte[1024];
+                bytesRec = socket.Receive(bytes);
+
+                if (bytesRec == 0)
+                    break;
+
+                _file.Write(bytes, 0, bytesRec);
+
+                offset += bytesRec;
+
+                if (socket.Available == 0)
                 {
-                    byte[] data = new byte[4096];
-                    int recv = _sockets[index].Receive(data, SocketFlags.None);
-
-                    if (recv == 0)
+                    System.Threading.Thread.Sleep(1000);
+                    if (socket.Available == 0)
                         break;
-
-                    _file.Write(data, 0, recv);
                 }
-                //  иначе проверяем, является ли это последним блоком данных, который меньше нашего буфера
-                else
+                    
+            }
+  
+            _file.Close();
+        }
+
+        public static void CheckConnection()
+        {
+            if (_sockets.Count == 0)
+                return;
+
+            for (int i = 0; i < _sockets.Count; i++)
+            {
+                if ((_sockets[i].Poll(1000, SelectMode.SelectRead) &&
+                    (_sockets[i].Available == 0)) ||
+                    !_sockets[i].Connected)
                 {
-                    if(_file.Length + _sockets[index].Available == 5402624)
-                    {
-                        byte[] data = new byte[4096];
-                        int recv = _sockets[index].Receive(data, SocketFlags.None);
+                    HostStatusGc = ($"Disconect socket: #" + $"{i + 1} " +
+                        $"{_sockets[i].RemoteEndPoint.AddressFamily.ToString()}");
 
-                        _file.Write(data, 0, recv);
+                    _sockets[i].Shutdown(SocketShutdown.Both);
+                    _sockets[i].Close();
 
-                        break;
-                    }
+                    _sockets.RemoveAt(i);
                 }
             }
-            // если нет подходящих условий - то ничего не делаем, пока собственно буфер приема не заполнится
+        }
+
+        public static void TerminateGridCore()
+        {
+            if (_sockets.Count != 0)
+            {
+               
+                do
+                { 
+                    _sockets[0].Shutdown(SocketShutdown.Both);
+                    _sockets[0].Close();
+                    _sockets.RemoveAt(0);
+                } while (_sockets.Count != 0);
+
+                //_sockListner.Shutdown(SocketShutdown.Both);
+               // _sockListner.Disconnect(false);
+            }
+
+            _sockListner.Close();
+
+            HostStatusGc = "------ GRID System was terminated at: " +
+                DateTime.Now + " ------";
         }
         
         public static string HostNameGc
@@ -140,6 +224,22 @@ namespace Server
 
         public static string HostStatusGc
         {
+            set
+            {
+                lock (_locker)
+                {
+                    _hostStatus = value;
+
+                    _logFile = new FileStream(@"GRID_LOG.txt", FileMode.OpenOrCreate, FileAccess.ReadWrite,
+                           FileShare.None);
+                    _logFile.Seek(0, SeekOrigin.End);
+
+                    byte[] log = System.Text.Encoding.Default.GetBytes(_hostStatus + Environment.NewLine);
+                    _logFile.Write(log, 0, log.Length);
+
+                    _logFile.Close();
+                }
+            }
             get { return _hostStatus; }
         }
 
@@ -148,15 +248,14 @@ namespace Server
         private static IPEndPoint  _ipEndPoint;
         private static Socket      _sockListner;
         private static List <Socket>  _sockets = new List<Socket>();
-        private static int _hostPort = 0;
+        private static int _hostPort = 8005;
         private static String _hostStatus;
         private static FileStream _file;
-        private static int _objCount = 0;
+        private static FileStream _logFile;
+        
+        private static string _WorkLoad = "load";
+        private static string _ProcessData = "data";
 
-        private enum Commands
-        {
-           Workload = 0001010,
-           LoadData
-        }
+        private static object _locker = new object();
     }
 }
